@@ -1,188 +1,33 @@
 import json
 import os
 import streamlit as st
-from openai import OpenAI
+from statistical_analyzer import StatisticalAnalyzer
+from apy_data_loader import APYDataLoader
 
 class AIAnalyzer:
-    """AI-powered analysis using OpenAI for market insights and forecasting"""
+    """Statistical analysis using real APY data for market insights and forecasting"""
     
-    def __init__(self):
-        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
-        # do not change this unless explicitly requested by the user
-        self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
-        if self.openai_api_key:
-            self.client = OpenAI(api_key=self.openai_api_key)
-        else:
-            self.client = None
-            st.warning("OpenAI API key not found. AI features will be limited.")
+    def __init__(self, apy_loader=None):
+        self.apy_loader = apy_loader or APYDataLoader()
+        self.statistical_analyzer = StatisticalAnalyzer(self.apy_loader)
+        if apy_loader is None:
+            st.success("Loaded real agricultural data for statistical analysis")
     
     def analyze_market_trends(self, market_data):
-        """Analyze market trends using AI"""
-        if not self.client:
-            return "AI analysis unavailable - OpenAI API key not configured"
-        
-        try:
-            # Prepare market data summary for AI analysis
-            data_summary = self._prepare_market_summary(market_data)
-            
-            prompt = f"""
-            As an agricultural market analyst, analyze the following market data and provide insights:
-            
-            Market Data Summary:
-            {data_summary}
-            
-            Please provide a comprehensive analysis including:
-            1. Current market trends and patterns
-            2. Key factors driving price movements
-            3. Seasonal patterns observed
-            4. Market volatility assessment
-            5. Potential risks and opportunities
-            6. Short-term outlook (1-4 weeks)
-            
-            Format your response as a clear, professional market analysis report.
-            """
-            
-            response = self.client.chat.completions.create(
-                model="gpt-5",
-                messages=[
-                    {"role": "system", "content": "You are an expert agricultural market analyst with deep knowledge of commodity markets, seasonal patterns, and economic factors affecting crop prices."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            st.error(f"Error generating AI market analysis: {str(e)}")
-            return None
+        """Analyze market trends using statistical methods"""
+        return self.statistical_analyzer.analyze_market_trends(market_data)
     
     def analyze_forecast(self, forecast_data):
-        """Analyze forecast results and provide AI insights"""
-        if not self.client:
-            return "AI analysis unavailable - OpenAI API key not configured"
-        
-        try:
-            forecast_summary = self._prepare_forecast_summary(forecast_data)
-            
-            prompt = f"""
-            Analyze this crop demand forecast and provide actionable insights:
-            
-            Forecast Summary:
-            {forecast_summary}
-            
-            Please provide:
-            1. Forecast reliability assessment
-            2. Key driving factors for the predicted demand
-            3. Potential market scenarios (best case, worst case, most likely)
-            4. Recommended actions for farmers and traders
-            5. Risk factors to monitor
-            6. Confidence level explanation
-            
-            Keep the analysis practical and actionable for agricultural stakeholders.
-            """
-            
-            response = self.client.chat.completions.create(
-                model="gpt-5",
-                messages=[
-                    {"role": "system", "content": "You are an agricultural forecasting expert who helps farmers and traders make data-driven decisions based on demand predictions."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            st.error(f"Error generating forecast analysis: {str(e)}")
-            return None
+        """Analyze forecast results using statistical methods"""
+        return self.statistical_analyzer.analyze_forecast(forecast_data)
     
     def generate_crop_recommendations(self, comparison_data):
-        """Generate crop investment/planting recommendations based on comparison"""
-        if not self.client:
-            return "AI recommendations unavailable - OpenAI API key not configured"
-        
-        try:
-            comparison_summary = self._prepare_comparison_summary(comparison_data)
-            
-            prompt = f"""
-            Based on this multi-crop comparison analysis, provide strategic recommendations:
-            
-            Crop Comparison Data:
-            {comparison_summary}
-            
-            Please provide:
-            1. Top 3 crops for investment/planting priority
-            2. Reasoning for each recommendation
-            3. Risk-adjusted return expectations
-            4. Diversification strategies
-            5. Timing considerations for planting/trading
-            6. Market entry/exit strategies
-            
-            Format as clear, actionable recommendations for agricultural decision-makers.
-            Respond in JSON format with this structure:
-            {
-                "top_recommendations": [
-                    {"crop": "crop_name", "priority": "High/Medium/Low", "reasoning": "explanation"},
-                ],
-                "market_strategy": "overall strategy recommendation",
-                "risk_assessment": "risk evaluation",
-                "timing_advice": "timing recommendations"
-            }
-            """
-            
-            response = self.client.chat.completions.create(
-                model="gpt-5",
-                messages=[
-                    {"role": "system", "content": "You are a strategic agricultural advisor who helps optimize crop selection and investment decisions based on market analysis."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
-            )
-            
-            result = json.loads(response.choices[0].message.content or '{}')
-            return self._format_recommendations(result)
-            
-        except Exception as e:
-            st.error(f"Error generating crop recommendations: {str(e)}")
-            return None
+        """Generate crop investment/planting recommendations based on statistical analysis"""
+        return self.statistical_analyzer.generate_crop_recommendations(comparison_data)
     
     def analyze_seasonal_patterns(self, seasonal_data):
-        """Analyze seasonal patterns using AI"""
-        if not self.client:
-            return "AI seasonal analysis unavailable - OpenAI API key not configured"
-        
-        try:
-            seasonal_summary = self._prepare_seasonal_summary(seasonal_data)
-            
-            prompt = f"""
-            Analyze these seasonal patterns in agricultural commodity data:
-            
-            Seasonal Data:
-            {seasonal_summary}
-            
-            Provide insights on:
-            1. Strongest seasonal patterns identified
-            2. Optimal timing for planting and harvesting
-            3. Price peak and trough periods
-            4. Seasonal trading strategies
-            5. Climate and weather impact factors
-            6. Year-over-year pattern consistency
-            
-            Focus on actionable seasonal intelligence for farming operations.
-            """
-            
-            response = self.client.chat.completions.create(
-                model="gpt-5",
-                messages=[
-                    {"role": "system", "content": "You are a seasonal agricultural analyst specializing in crop timing, weather patterns, and seasonal market dynamics."},
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            st.error(f"Error analyzing seasonal patterns: {str(e)}")
-            return None
+        """Analyze seasonal patterns using statistical methods"""
+        return self.statistical_analyzer.analyze_seasonal_patterns(seasonal_data)
     
     def _prepare_market_summary(self, market_data):
         """Prepare market data summary for AI analysis"""

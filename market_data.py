@@ -3,36 +3,54 @@ import numpy as np
 from datetime import datetime, timedelta
 import streamlit as st
 import json
+from apy_data_loader import APYDataLoader
 
 class MarketDataManager:
-    """Manages market data collection, storage, and retrieval"""
+    """Manages market data collection, storage, and retrieval using real APY data"""
     
-    def __init__(self):
+    def __init__(self, apy_loader=None):
+        self.apy_loader = apy_loader or APYDataLoader()
         self.data_cache = {}
-        self.initialize_sample_data()
+        self.user_market_data = []
+        self.user_weather_data = []
+        self.user_trend_data = []
     
-    def initialize_sample_data(self):
-        """Initialize with sample market data for demonstration"""
-        # In production, this would connect to real data sources
-        self.sample_crops = ["Wheat", "Corn", "Soybeans", "Rice", "Tomatoes", "Potatoes"]
-        self.generate_sample_historical_data()
+    def get_available_crops(self):
+        """Get available crops from APY dataset"""
+        return self.apy_loader.get_available_crops()
     
     def get_historical_data(self, crop, start_date, end_date):
-        """Retrieve historical market data for a crop"""
+        """Retrieve historical market data for a crop using APY data"""
         try:
             cache_key = f"{crop}_{start_date}_{end_date}"
             
             if cache_key in self.data_cache:
                 return self.data_cache[cache_key]
             
-            # Generate sample historical data
-            data = self._generate_historical_sample(crop, start_date, end_date)
+            # Get real APY data
+            apy_data = self.apy_loader.get_crop_data(crop)
             
-            if data is not None:
-                self.data_cache[cache_key] = data
-                return data
+            if apy_data is not None and not apy_data.empty:
+                # Filter by date range if needed
+                if 'Date' in apy_data.columns:
+                    apy_data['date'] = pd.to_datetime(apy_data['Date'])
+                    mask = (apy_data['date'] >= pd.to_datetime(start_date)) & (apy_data['date'] <= pd.to_datetime(end_date))
+                    filtered_data = apy_data.loc[mask]
+                else:
+                    # If no date filtering possible, return all data
+                    filtered_data = apy_data.copy()
+                    filtered_data['date'] = pd.to_datetime(f"{filtered_data['Year'].iloc[-1]}-01-01")
+                
+                # Rename columns for compatibility
+                if 'Price' in filtered_data.columns:
+                    filtered_data['price'] = filtered_data['Price']
+                if 'Production' in filtered_data.columns:
+                    filtered_data['volume'] = filtered_data['Production'] * 1000  # Convert to appropriate scale
+                
+                self.data_cache[cache_key] = filtered_data
+                return filtered_data
             else:
-                st.warning(f"No historical data available for {crop} in the specified date range")
+                st.warning(f"No APY data available for {crop}")
                 return None
                 
         except Exception as e:
@@ -40,20 +58,35 @@ class MarketDataManager:
             return None
     
     def get_recent_updates(self):
-        """Get recent market updates and news"""
+        """Get recent market updates based on APY data trends"""
         try:
-            # Simulate recent market updates
             updates = []
-            crops = ["Wheat", "Corn", "Soybeans", "Rice"]
+            available_crops = self.apy_loader.get_available_crops()[:6]  # Get first 6 crops
             
-            for i, crop in enumerate(crops):
-                update = {
-                    'crop': crop,
-                    'date': (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d"),
-                    'summary': f"{crop} market showing {'positive' if np.random.random() > 0.5 else 'mixed'} signals with {'increased' if np.random.random() > 0.5 else 'stable'} trading volume.",
-                    'price_change': f"{np.random.uniform(-5, 5):.1f}%"
-                }
-                updates.append(update)
+            for i, crop in enumerate(available_crops):
+                # Get market trends for this crop
+                trends = self.apy_loader.get_market_trends(crop, 3)
+                
+                if trends:
+                    prod_growth = trends.get('total_production_growth', 0)
+                    trend_direction = trends.get('trend_direction', 'stable')
+                    
+                    # Create meaningful update based on real data
+                    summary = f"{crop} showing {trend_direction} trend with {abs(prod_growth):.1f}% production change over recent years."
+                    if prod_growth > 5:
+                        summary += " Strong growth momentum observed."
+                    elif prod_growth < -5:
+                        summary += " Production decline requires attention."
+                    else:
+                        summary += " Stable production levels maintained."
+                    
+                    update = {
+                        'crop': crop,
+                        'date': (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d"),
+                        'summary': summary,
+                        'price_change': f"{trends.get('estimated_price_growth', 0):+.1f}%"
+                    }
+                    updates.append(update)
             
             return updates
             

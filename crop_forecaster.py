@@ -5,11 +5,13 @@ import streamlit as st
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
+from apy_data_loader import APYDataLoader
 
 class CropForecaster:
-    """Advanced crop demand forecasting using multiple models"""
+    """Advanced crop demand forecasting using multiple models and real APY data"""
     
-    def __init__(self):
+    def __init__(self, apy_loader=None):
+        self.apy_loader = apy_loader or APYDataLoader()
         self.models = {
             'linear': LinearRegression(),
             'random_forest': RandomForestRegressor(n_estimators=100, random_state=42)
@@ -17,54 +19,51 @@ class CropForecaster:
         self.fitted_models = {}
     
     def generate_forecast(self, forecast_params):
-        """Generate comprehensive crop demand forecast"""
+        """Generate comprehensive crop demand forecast using real APY data"""
         try:
             crop = forecast_params['crop']
             weeks = forecast_params['weeks']
             
-            # Generate base forecast using multiple approaches
-            base_forecast = self._generate_base_forecast(crop, weeks)
+            # Use APY data loader for real historical-based forecasting
+            forecast_result = self.apy_loader.generate_demand_forecast(crop, weeks)
             
-            # Apply adjustments based on parameters
-            adjusted_forecast = self._apply_forecast_adjustments(base_forecast, forecast_params)
-            
-            # Calculate confidence metrics
-            confidence_score = self._calculate_confidence(adjusted_forecast, forecast_params)
-            
-            # Identify peak demand period
-            peak_week = np.argmax(adjusted_forecast) + 1
-            
-            # Calculate average change
-            avg_change = np.mean(np.diff(adjusted_forecast))
-            
-            # Determine trend direction
-            trend = "increasing" if avg_change > 0 else "decreasing" if avg_change < 0 else "stable"
-            
-            forecast_result = {
-                'crop': crop,
-                'weeks': weeks,
-                'values': adjusted_forecast.tolist(),
-                'peak_week': peak_week,
-                'avg_change': avg_change * 100,  # Convert to percentage
-                'confidence': confidence_score,
-                'trend': trend,
-                'factors': self._identify_key_factors(forecast_params),
-                'dates': self._generate_forecast_dates(weeks)
-            }
-            
-            return forecast_result
+            if forecast_result:
+                # Enhance with parameter-based adjustments
+                enhanced_forecast = self._apply_forecast_adjustments(
+                    np.array(forecast_result['values']), forecast_params
+                )
+                
+                # Update result with enhanced forecast
+                forecast_result['values'] = enhanced_forecast.tolist()
+                forecast_result['peak_week'] = int(np.argmax(enhanced_forecast) + 1)
+                forecast_result['avg_change'] = float(np.mean(np.diff(enhanced_forecast)) * 100)
+                forecast_result['factors'] = self._identify_key_factors(forecast_params)
+                
+                # Enhance confidence based on APY data quality
+                apy_confidence = forecast_result.get('confidence', 0.7)
+                param_confidence = self._calculate_confidence(enhanced_forecast, forecast_params)
+                forecast_result['confidence'] = float((apy_confidence + param_confidence) / 2)
+                
+                return forecast_result
+            else:
+                # Fallback to model-based forecast if APY data unavailable
+                st.warning(f"APY data unavailable for {crop}, using model-based forecast")
+                return self._generate_fallback_forecast(forecast_params)
             
         except Exception as e:
             st.error(f"Error generating forecast: {str(e)}")
             return None
     
     def generate_multi_crop_comparison(self, crops, weeks, metric):
-        """Generate comparison data for multiple crops"""
+        """Generate comparison data for multiple crops using real APY data"""
         try:
             comparison_data = {}
             
             for crop in crops:
-                # Generate individual forecast for each crop
+                # Get real market trends from APY data
+                market_trends = self.apy_loader.get_market_trends(crop, 5)
+                
+                # Generate forecast with real data backing
                 forecast_params = {
                     'crop': crop,
                     'weeks': weeks,
@@ -77,20 +76,27 @@ class CropForecaster:
                 
                 forecast = self.generate_forecast(forecast_params)
                 
-                if forecast:
-                    # Calculate metric-specific scores
+                if forecast and market_trends:
+                    # Calculate metric-specific scores using real data
                     score = self._calculate_metric_score(forecast, metric)
                     volatility = np.std(forecast['values'])
-                    growth_potential = self._calculate_growth_potential(forecast)
-                    market_share = self._estimate_market_share(crop)
+                    
+                    # Use real historical growth for growth potential
+                    historical_growth = market_trends.get('total_production_growth', 0)
+                    growth_potential = min(100, max(0, 50 + historical_growth))
+                    
+                    # Get top producing states for market share estimation
+                    top_states = self.apy_loader.get_top_producing_states(crop)
+                    market_share = len(top_states) * 8 if top_states else 60  # Rough estimate
                     
                     comparison_data[crop] = {
-                        'score': score,
+                        'score': float(score),
                         'trend': forecast['trend'],
-                        'volatility': volatility,
-                        'growth_potential': growth_potential,
-                        'market_share': market_share,
-                        'forecast_values': forecast['values']
+                        'volatility': float(volatility),
+                        'growth_potential': float(growth_potential),
+                        'market_share': float(market_share),
+                        'forecast_values': forecast['values'],
+                        'historical_growth': historical_growth
                     }
             
             return comparison_data
@@ -267,6 +273,48 @@ class CropForecaster:
         trend = np.power(base_trend, np.arange(weeks)) * (1 + trend_variation)
         
         return trend
+    
+    def _generate_fallback_forecast(self, forecast_params):
+        """Generate fallback forecast when APY data is unavailable"""
+        try:
+            crop = forecast_params['crop']
+            weeks = forecast_params['weeks']
+            
+            # Generate base forecast using original method
+            base_forecast = self._generate_base_forecast(crop, weeks)
+            
+            # Apply adjustments based on parameters
+            adjusted_forecast = self._apply_forecast_adjustments(base_forecast, forecast_params)
+            
+            # Calculate confidence metrics
+            confidence_score = self._calculate_confidence(adjusted_forecast, forecast_params)
+            
+            # Identify peak demand period
+            peak_week = np.argmax(adjusted_forecast) + 1
+            
+            # Calculate average change
+            avg_change = np.mean(np.diff(adjusted_forecast))
+            
+            # Determine trend direction
+            trend = "increasing" if avg_change > 0 else "decreasing" if avg_change < 0 else "stable"
+            
+            forecast_result = {
+                'crop': crop,
+                'weeks': weeks,
+                'values': adjusted_forecast.tolist(),
+                'peak_week': peak_week,
+                'avg_change': avg_change * 100,  # Convert to percentage
+                'confidence': confidence_score,
+                'trend': trend,
+                'factors': self._identify_key_factors(forecast_params),
+                'dates': self._generate_forecast_dates(weeks)
+            }
+            
+            return forecast_result
+            
+        except Exception as e:
+            st.error(f"Error generating fallback forecast: {str(e)}")
+            return None
     
     def _calculate_weather_impact(self, crop):
         """Calculate weather impact on crop demand"""

@@ -75,7 +75,7 @@ class APYDataLoader:
             crop_data.columns = ['Year', 'State', 'District', 'Area', 'Production', 'Yield']
             
             # Add calculated fields
-            crop_data['Price'] = self._estimate_price_from_yield(crop_data['Yield'], crop)
+            crop_data['Price'] = self._estimate_price_from_yield(crop_data['Yield'].copy(), crop)
             crop_data['Date'] = pd.to_datetime(crop_data['Year'], format='%Y')
             
             return crop_data.sort_values('Year')
@@ -113,10 +113,10 @@ class APYDataLoader:
             avg_price = yearly_stats['Price']['mean']
             
             if len(total_production) > 1:
-                prod_growth = ((total_production.iloc[-1] - total_production.iloc[0]) / total_production.iloc[0] * 100)
-                area_growth = ((total_area.iloc[-1] - total_area.iloc[0]) / total_area.iloc[0] * 100)
-                yield_growth = ((avg_yield.iloc[-1] - avg_yield.iloc[0]) / avg_yield.iloc[0] * 100)
-                price_growth = ((avg_price.iloc[-1] - avg_price.iloc[0]) / avg_price.iloc[0] * 100)
+                prod_growth = float((total_production.iloc[-1] - total_production.iloc[0]) / total_production.iloc[0] * 100)
+                area_growth = float((total_area.iloc[-1] - total_area.iloc[0]) / total_area.iloc[0] * 100)
+                yield_growth = float((avg_yield.iloc[-1] - avg_yield.iloc[0]) / avg_yield.iloc[0] * 100)
+                price_growth = float((avg_price.iloc[-1] - avg_price.iloc[0]) / avg_price.iloc[0] * 100)
             else:
                 prod_growth = area_growth = yield_growth = price_growth = 0
             
@@ -156,8 +156,8 @@ class APYDataLoader:
             patterns['yearly_yield'] = yearly_yield.to_dict()
             
             # Identify peak and low production years
-            patterns['peak_production_year'] = int(yearly_production.idxmax())
-            patterns['lowest_production_year'] = int(yearly_production.idxmin())
+            patterns['peak_production_year'] = int(yearly_production.idxmax()) if len(yearly_production) > 0 else 2017
+            patterns['lowest_production_year'] = int(yearly_production.idxmin()) if len(yearly_production) > 0 else 2010
             
             # Calculate volatility
             patterns['production_volatility'] = yearly_production.std()
@@ -264,7 +264,7 @@ class APYDataLoader:
             state_production = year_data.groupby('State Name')[prod_col].sum().sort_values(ascending=False)
             
             # Return top 10 states with their production
-            return [(state, production) for state, production in state_production.head(10).items() if production > 0]
+            return [(str(state), float(production)) for state, production in state_production.head(10).items() if production > 0]
             
         except Exception as e:
             st.error(f"Error getting top producing states for {crop}: {str(e)}")

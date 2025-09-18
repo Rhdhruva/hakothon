@@ -11,6 +11,7 @@ from ai_analyzer import AIAnalyzer
 from crop_forecaster import CropForecaster
 from visualization import Visualizer
 from market_data import MarketDataManager
+from apy_data_loader import APYDataLoader
 
 # Page configuration
 st.set_page_config(
@@ -22,13 +23,17 @@ st.set_page_config(
 # Initialize components
 @st.cache_resource
 def initialize_components():
-    """Initialize application components"""
+    """Initialize application components with shared APY data"""
+    # Create single APY loader instance to share across components
+    apy_loader = APYDataLoader()
+    
     return {
+        'apy_loader': apy_loader,
         'data_processor': DataProcessor(),
-        'ai_analyzer': AIAnalyzer(),
-        'forecaster': CropForecaster(),
+        'ai_analyzer': AIAnalyzer(apy_loader),
+        'forecaster': CropForecaster(apy_loader),
         'visualizer': Visualizer(),
-        'market_data': MarketDataManager()
+        'market_data': MarketDataManager(apy_loader)
     }
 
 components = initialize_components()
@@ -62,11 +67,12 @@ if page == "Dashboard":
     # Quick forecast overview
     st.subheader("Quick Forecast Overview")
     
-    # Sample crop selection for demo
+    # Real crop selection from APY data
+    available_crops = components['apy_loader'].get_available_crops()
     selected_crops = st.multiselect(
         "Select crops for quick view:",
-        ["Wheat", "Corn", "Soybeans", "Rice", "Tomatoes", "Potatoes"],
-        default=["Wheat", "Corn", "Soybeans"]
+        available_crops,
+        default=available_crops[:3] if len(available_crops) >= 3 else available_crops
     )
     
     if selected_crops:
@@ -93,10 +99,11 @@ if page == "Dashboard":
 elif page == "Market Analysis":
     st.title("Historical Market Price Analysis")
     
-    # Crop selection
+    # Crop selection from real APY data
+    available_crops = components['apy_loader'].get_available_crops()
     crop_type = st.selectbox(
         "Select crop for analysis:",
-        ["Wheat", "Corn", "Soybeans", "Rice", "Tomatoes", "Potatoes", "Cotton", "Sugar"]
+        available_crops
     )
     
     # Time range selection
@@ -158,9 +165,10 @@ elif page == "Demand Forecasting":
     # Forecasting parameters
     col1, col2 = st.columns(2)
     with col1:
+        available_crops_forecast = components['apy_loader'].get_available_crops()
         crop_for_forecast = st.selectbox(
             "Select crop:",
-            ["Wheat", "Corn", "Soybeans", "Rice", "Tomatoes", "Potatoes"]
+            available_crops_forecast
         )
         forecast_weeks = st.slider("Forecast horizon (weeks):", 1, 12, 6)
     
@@ -229,7 +237,8 @@ elif page == "Data Input":
         
         col1, col2 = st.columns(2)
         with col1:
-            crop_input = st.selectbox("Crop:", ["Wheat", "Corn", "Soybeans", "Rice", "Tomatoes", "Potatoes"])
+            available_crops_input = components['apy_loader'].get_available_crops()
+            crop_input = st.selectbox("Crop:", available_crops_input)
             price_input = st.number_input("Price per unit ($):", min_value=0.0, step=0.01)
             volume_input = st.number_input("Trading volume:", min_value=0, step=1000)
         
@@ -290,7 +299,8 @@ elif page == "Data Input":
         st.subheader("Consumer Trend Data")
         
         trend_type = st.selectbox("Trend type:", ["Demand Increase", "Demand Decrease", "Price Sensitivity", "Seasonal Preference"])
-        crop_trend = st.selectbox("Affected crop:", ["Wheat", "Corn", "Soybeans", "Rice", "Tomatoes", "Potatoes"])
+        available_crops_trend = components['apy_loader'].get_available_crops()
+        crop_trend = st.selectbox("Affected crop:", available_crops_trend)
         impact_score = st.slider("Impact score (1-10):", 1, 10, 5)
         trend_description = st.text_area("Trend description:")
         
@@ -313,11 +323,12 @@ elif page == "Data Input":
 elif page == "Multi-Crop Comparison":
     st.title("Multi-Crop Demand Comparison")
     
-    # Crop selection for comparison
+    # Crop selection for comparison from real APY data
+    available_comparison_crops = components['apy_loader'].get_available_crops()
     comparison_crops = st.multiselect(
         "Select crops to compare:",
-        ["Wheat", "Corn", "Soybeans", "Rice", "Tomatoes", "Potatoes", "Cotton", "Sugar"],
-        default=["Wheat", "Corn", "Soybeans"]
+        available_comparison_crops,
+        default=available_comparison_crops[:3] if len(available_comparison_crops) >= 3 else available_comparison_crops
     )
     
     if len(comparison_crops) >= 2:
